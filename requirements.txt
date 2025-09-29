@@ -1,0 +1,37 @@
+# --- Core Deep Learning Framework ---
+# PyTorch is the foundation for all models.
+torch>=2.0.0
+torchvision
+torchaudio
+
+# --- Computer Vision ---
+# YOLOv8 object detection framework
+ultralytics>=8.0.0
+# Core library for image/video processing
+opencv-python-headless==4.9.0.80
+
+# --- Foundational AI Models ---
+# For CLIP and other models from Hugging Face Hub
+transformers>=4.30.0
+# For Segment Anything Model (SAM)
+git+https://github.com/facebookresearch/segment-anything.git
+
+# --- Data Handling & Utilities ---
+# Core library for data manipulation (DataFrames)
+pandas>=2.0.0
+# For efficient data storage (Feather format)
+pyarrow>=14.0.0
+# Foundational library for numerical operations
+# IMPORTANT: Must be < 2.0 to maintain compatibility with compiled libraries like PyTorch.
+numpy<2.0
+
+# --- Visualization & Progress ---
+# For plotting and displaying images in notebooks/scripts
+matplotlib>=3.7.0
+# For beautiful progress bars in the console
+tqdm>=4.65.0
+
+# --- Optional but Recommended for development ---
+# For interactive development environments
+ipykernel
+jupyter
