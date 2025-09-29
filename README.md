@@ -23,8 +23,8 @@ Pipeline được chia thành 4 giai đoạn chính, mỗi giai đoạn tương 
 
 1.  **Clone Repository:**
     ```bash
-    git clone [your-repo-url]
-    cd [your-repo-name]
+    git clone https://github.com/MonsieurNam/object_video_retrieval.git
+    cd object_video_retrieval
     ```
 
 2.  **Tạo Môi trường Ảo (Khuyến khích):**
