@@ -57,7 +57,7 @@ Pipeline bao gồm **4 giai đoạn chính**, mỗi giai đoạn được triể
 
 2. **Tạo môi trường ảo (khuyến nghị)**
    ```bash
-   python -m venv venv
+   python3 -m venv venv
    source venv/bin/activate   # Linux/macOS
    # venv\Scripts\activate    # Windows
    ```
@@ -94,25 +94,25 @@ Pipeline bao gồm **4 giai đoạn chính**, mỗi giai đoạn được triể
 
 1. **Xây dựng CSDL bằng chứng**
    ```bash
-   python 1_build_database_v4.py
+   python3 build_database_v4.py
    ```
    Kết quả: `evidence_database_v4_high_quality.feather`  
    > ⏳ Quá trình này có thể kéo dài nhiều giờ.
 
 2. **Kiểm thử thư viện truy vấn (tùy chọn nhưng khuyến khích)**
    ```bash
-   python 2_query_library_v4.py
+   python3 query_library_v4.py
    ```
 
 3. **Sinh file submission**
-   - Mở file `3_generate_submission_v4.py` và cập nhật:
+   - Mở file `generate_submission_v4.py` và cập nhật:
      ```python
      TEAM_ID = "AI25-15"               # thay bằng mã đội của bạn
      FINAL_CONFIDENCE_THRESHOLD = 0.35 # chỉnh ngưỡng nếu cần
      ```
    - Chạy script:
      ```bash
-     python 3_generate_submission_v4.py
+     python3 generate_submission_v4.py
      ```
    - Kết quả: file JSON, ví dụ `AI25-15.json`.
 
@@ -120,6 +120,6 @@ Pipeline bao gồm **4 giai đoạn chính**, mỗi giai đoạn được triể
    - Đảm bảo `CONFIGURATION` trong `4_visualize_final_submission_v4.py` khớp với `query_library`.  
    - Chạy:
      ```bash
-     python 4_visualize_final_submission_v4.py
+     python3 visualize_final_submission_v4.py
      ```
    - Kết quả: thư mục `visual_report_v4/` chứa báo cáo HTML cho từng câu hỏi (`Q1/index.html`, `Q2/index.html`, ...).  
