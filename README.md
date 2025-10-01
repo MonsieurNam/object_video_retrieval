@@ -72,6 +72,14 @@ Pipeline bao gồm **4 giai đoạn chính**, mỗi giai đoạn được triể
    ```bash
    pip install -r requirements.txt
    ```
+   V5:
+   ```bash
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+    pip install opencv-python-headless ultralytics
+    pip install git+https://github.com/TencentARC/YOLOWorld.git
+    pip install boxmot
+    pip install tqdm
+   ```
    > ⚠️ Việc cài đặt `torch` và `segment-anything` có thể mất nhiều thời gian.
 
 4. **Chuẩn bị model checkpoints**
@@ -79,6 +87,7 @@ Pipeline bao gồm **4 giai đoạn chính**, mỗi giai đoạn được triể
      ```bash
      mkdir models
      ```
+   - Tải model **YoloWorld-L** từ [repo chính thức](https://huggingface.co/wondervictor/YOLO-World-V2.1/resolve/main/l_stage2-b3e3dc3f.pth).  
    - Tải model **SAM ViT-H** từ [repo chính thức](https://github.com/facebookresearch/segment-anything#model-checkpoints).  
    - Đặt file `sam_vit_h_4b8939.pth` vào thư mục `models/`.
 
