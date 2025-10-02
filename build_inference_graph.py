@@ -13,7 +13,7 @@ OUTPUT_DB_PATH = Path('./inference_graph_database_v7.feather')
 
 # --- Tham số cho việc xây dựng đồ thị và suy luận ---
 IOU_THRESHOLD = 0.4            # Ngưỡng IoU để tạo "Cạnh Thời gian"
-MAX_FRAME_GAP = 5              # Số frame tối đa một track có thể bị "mất dấu"
+MAX_FRAME_GAP = 50              # Số frame tối đa một track có thể bị "mất dấu"
 SIMILARITY_THRESHOLD = 0.92    # Ngưỡng Cosine Similarity để tạo "Cạnh Hình ảnh"
 ANCHOR_CONF_THRESHOLD = 0.90   # Ngưỡng confidence để một phát hiện trở thành "nút mỏ neo"
 

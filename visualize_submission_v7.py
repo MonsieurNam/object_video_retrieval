@@ -11,6 +11,7 @@ from tqdm import tqdm
 import math
 import gc
 
+
 # --- 1. CONFIGURATION ---
 
 SUBMISSION_FILE_PATH = Path('./AI25-15.json')
@@ -29,7 +30,7 @@ THUMBNAIL_MAX_W, THUMBNAIL_MAX_H = 480, 270
 SAVE_FORMAT, WEBP_QUALITY = 'webp', 85
 SHOW_TILE_LABEL, LABEL_POS, LABEL_ALPHA = True, "bottom", 0.7
 
-QUERY_DESCRIPTIONS = {"1":"Người VÀ Xe gắn máy","2":"Người VÀ Xe đạp","3":"Xe ô tô","4":">=1 Người VÀ >=1 Xe đạp","5":"Người, Xe máy, VÀ Xe ô tô","6":"Nhiều hơn 1 Người","7":"Nhiều hơn 1 Xe máy","8":"CHỈ có 3 Người"}
+QUERY_DESCRIPTIONS = {"1":"Người VÀ Xe gắn máy","2":"Người VÀ Xe đạp","3":"Xe ô tô","4":"=1 Người VÀ =1 Xe đạp","5":"Người, Xe máy, VÀ Xe ô tô","6":"Nhiều hơn 1 Người","7":"Nhiều hơn 1 Xe máy","8":"CHỈ có 3 Người"}
 
 # --- 2. CÁC LỚP VÀ HÀM TIỆN ÍCH ---
 
@@ -59,39 +60,47 @@ class VideoReaderPool:
 np.random.seed(42)
 TRACK_COLORS = np.random.randint(50, 255, size=(1000, 3), dtype=np.uint8)
 
-def draw_detections_v7(frame_bgr, det_rows, question_id):
-    """Hàm vẽ bbox V7, tô màu theo track_id và hiển thị nhãn đã suy luận."""
-    
-    # Logic để quyết định ngưỡng tin cậy dựa trên câu hỏi
+def draw_detections_v7_clearer(frame_bgr, det_rows, question_id):
+    """
+    Phiên bản vẽ rõ ràng hơn: Chỉ vẽ các đối tượng thỏa mãn ngưỡng VÀ
+    thuộc các lớp liên quan đến câu hỏi.
+    """
+    q_targets_map = {
+        "1": ['person', 'motorcycle'], "2": ['person', 'bicycle'], "3": ['car'],
+        "4": ['person', 'bicycle'], "5": ['person', 'motorcycle', 'car'],
+        "6": ['person'], "7": ['motorcycle'], "8": ['person']
+    }
+    q_targets = q_targets_map.get(question_id, [])
+    if not q_targets: # Nếu không xác định được lớp mục tiêu, vẽ tất cả
+        q_targets = list(det_rows['inferred_class_name'].unique())
+
+    # Ngưỡng tin cậy dựa trên câu hỏi
     conf_threshold = BASE_CONF
-    if question_id in "67":
-        conf_threshold = COUNTING_CONF_BASE
-    elif question_id == "8":
-        conf_threshold = STRICT_COUNTING_CONF_BASE
+    if question_id in "67": conf_threshold = COUNTING_CONF_BASE
+    elif question_id == "8": conf_threshold = STRICT_COUNTING_CONF_BASE
 
     for _, det in det_rows.iterrows():
-        if det['confidence'] < conf_threshold:
-            continue
-            
-        x1, y1, x2, y2 = [int(c) for c in det['bbox']]
-        
-        # Sử dụng nhãn đã suy luận
-        inferred_cls = det['inferred_class_name']
-        original_cls = det['class_name']
         conf = det['confidence']
+        cls_name = det['inferred_class_name']
         track_id = int(det['track_id'])
-        
-        # Chọn màu dựa trên track_id
-        color = TRACK_COLORS[track_id % len(TRACK_COLORS)].tolist()
-        
-        label = f"T{track_id}:{inferred_cls}:{conf:.2f}"
-        # Thêm ghi chú nếu nhãn đã bị sửa
-        if inferred_cls != original_cls:
-            label += f" (was {original_cls})"
-        
-        cv2.rectangle(frame_bgr, (x1, y1), (x2, y2), color, 2)
-        cv2.putText(frame_bgr, label, (x1, max(0, y1 - 10)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2, cv2.LINE_AA)
+
+        # --- ĐIỀU KIỆN LỌC MỚI ---
+        # 1. Phải đạt ngưỡng tin cậy
+        # 2. VÀ phải thuộc các lớp mục tiêu của câu hỏi
+        if conf >= conf_threshold and cls_name in q_targets:
+            x1, y1, x2, y2 = [int(c) for c in det['bbox']]
+            
+            # Giờ đây, mọi box được vẽ đều là mục tiêu, nên luôn là màu xanh
+            color = (36, 255, 12) 
+            
+            label = f"T{track_id}:{cls_name}:{conf:.2f}"
+            if det.get('inferred_method') == 'propagated' and det['class_name'] != cls_name:
+                label += f" (was {det['class_name']})"
+            
+            cv2.rectangle(frame_bgr, (x1, y1), (x2, y2), color, 2)
+            cv2.putText(frame_bgr, label, (x1, max(0, y1 - 10)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2, cv2.LINE_AA)
+            
     return frame_bgr
 
 def read_frame_annotated_v7(pool, df_idx, video_name, frame_id, question_id):
