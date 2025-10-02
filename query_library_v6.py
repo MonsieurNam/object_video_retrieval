@@ -17,8 +17,8 @@ import random
 import numpy as np
 
 # Tắt các cảnh báo không cần thiết
-warnings.filterwarnings('ignore', category=pd.core.common.SettingWithCopyWarning)
-warnings.filterwarnings('ignore', category=FutureWarning)
+# warnings.filterwarnings('ignore', category=pd.core.common.SettingWithCopyWarning)
+# warnings.filterwarnings('ignore', category=FutureWarning)
 
 # --- 1. HÀM TIỀN XỬ LÝ (PRE-PROCESSING) ---
 
