@@ -16,7 +16,12 @@ import gc
 SUBMISSION_FILE_PATH = Path('./AI25-15.json')
 DB_PATH = Path('./inference_graph_database_v7.feather')
 VIDEO_SOURCE_DIR = Path('./Video_vong_loai/')
-OUTPUT_DIR = Path('./visual_report_v7_FINAL_SEQ/')
+OUTPUT_DIR = Path('./visual_report_v7_FINAL/')
+
+# --- Tham số (Đồng bộ với query_library_v7.py) ---
+BASE_CONF = 0.25 # Ngưỡng cơ bản
+COUNTING_CONF_BASE = 0.45 # Ngưỡng cho câu hỏi đếm
+STRICT_COUNTING_CONF_BASE = 0.7 # Ngưỡng cho câu hỏi đếm chính xác
 
 IMAGES_PER_ROW = 5
 ROWS_PER_SHEET = 8
@@ -51,19 +56,42 @@ class VideoReaderPool:
         for cap in self.pool.values(): cap.release()
         self.pool.clear()
 
+np.random.seed(42)
+TRACK_COLORS = np.random.randint(50, 255, size=(1000, 3), dtype=np.uint8)
+
 def draw_detections_v7(frame_bgr, det_rows, question_id):
+    """Hàm vẽ bbox V7, tô màu theo track_id và hiển thị nhãn đã suy luận."""
+    
+    # Logic để quyết định ngưỡng tin cậy dựa trên câu hỏi
+    conf_threshold = BASE_CONF
+    if question_id in "67":
+        conf_threshold = COUNTING_CONF_BASE
+    elif question_id == "8":
+        conf_threshold = STRICT_COUNTING_CONF_BASE
+
     for _, det in det_rows.iterrows():
+        if det['confidence'] < conf_threshold:
+            continue
+            
         x1, y1, x2, y2 = [int(c) for c in det['bbox']]
-        cls_name, conf, val_method = det['class_name'], det['confidence'], det.get('validation_method', '')
-        label = f"{cls_name}"
-        if val_method == 'interpolated':
-            color, thickness, label = (255, 255, 0), 1, f"INTERP: {cls_name}"
-        elif val_method == 'sam_clip_validated':
-            color, thickness, label = (255, 165, 0), 2, f"S+C: {cls_name}:{conf:.2f}"
-        else:
-            color, thickness, label = (36, 255, 12), 2, f"YOLO: {cls_name}:{conf:.2f}"
-        cv2.rectangle(frame_bgr, (x1, y1), (x2, y2), color, thickness)
-        cv2.putText(frame_bgr, label, (x1, max(0, y1 - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 1, cv2.LINE_AA)
+        
+        # Sử dụng nhãn đã suy luận
+        inferred_cls = det['inferred_class_name']
+        original_cls = det['class_name']
+        conf = det['confidence']
+        track_id = int(det['track_id'])
+        
+        # Chọn màu dựa trên track_id
+        color = TRACK_COLORS[track_id % len(TRACK_COLORS)].tolist()
+        
+        label = f"T{track_id}:{inferred_cls}:{conf:.2f}"
+        # Thêm ghi chú nếu nhãn đã bị sửa
+        if inferred_cls != original_cls:
+            label += f" (was {original_cls})"
+        
+        cv2.rectangle(frame_bgr, (x1, y1), (x2, y2), color, 2)
+        cv2.putText(frame_bgr, label, (x1, max(0, y1 - 10)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2, cv2.LINE_AA)
     return frame_bgr
 
 def read_frame_annotated_v7(pool, df_idx, video_name, frame_id, question_id):
