@@ -9,7 +9,7 @@ torchaudio
 ultralytics>=8.0.0
 # Core library for image/video processing
 opencv-python-headless==4.9.0.80
-
+networkx
 # --- Foundational AI Models ---
 # For CLIP and other models from Hugging Face Hub
 transformers>=4.30.0
