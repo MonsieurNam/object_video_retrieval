@@ -52,8 +52,39 @@ def query_3(df: pd.DataFrame, conf: float) -> dict:
     return apply_post_processing(result_dict)
 
 def query_4(df: pd.DataFrame, conf: float) -> dict:
-    # Yêu cầu mới: >=1 người và >=1 xe đạp
-    return query_2(df, conf) # Logic giống hệt Q2
+    """
+    Câu 4 (V5 - Đã sửa lại): Chứa ĐÚNG một người VÀ ĐÚNG một xe đạp.
+    """
+    # Sử dụng ngưỡng tin cậy cao hơn cho việc đếm chính xác
+    counting_conf = max(conf, 0.50)
+    reliable_df = df[df['confidence'] >= counting_conf]
+    
+    # Chỉ làm việc trên các đối tượng liên quan để tăng tốc độ
+    filtered_df = reliable_df[reliable_df['inferred_class_name'].isin(['person', 'bicycle'])]
+
+    # Đếm số lượng track_id duy nhất cho mỗi class trên từng frame
+    counts = filtered_df.groupby(['video_name', 'frame_id'])['inferred_class_name'].value_counts().unstack(fill_value=0)
+    
+    # Đảm bảo cả hai cột 'person' và 'bicycle' đều tồn tại để tránh lỗi
+    if 'person' not in counts.columns:
+        counts['person'] = 0
+    if 'bicycle' not in counts.columns:
+        counts['bicycle'] = 0
+
+    # Lọc các frame thỏa mãn điều kiện đếm chính xác
+    result_frames = counts[(counts['person'] == 1) & (counts['bicycle'] == 1)]
+    
+    if result_frames.empty:
+        return {}
+        
+    # Lấy danh sách video_name và frame_id từ kết quả
+    grouped = result_frames.reset_index().groupby('video_name')['frame_id'].unique().apply(list)
+    result_dict = grouped.apply(lambda lst: sorted([int(i) for i in lst])).to_dict()
+    
+    # Đối với câu hỏi đếm chính xác, chúng ta thường không áp dụng 'fill_gaps'
+    # vì nó có thể thêm vào các frame không thỏa mãn điều kiện đếm.
+    return result_dict
+
 
 def query_5(df: pd.DataFrame, conf: float) -> dict:
     reliable_df = df[df['confidence'] > conf]
