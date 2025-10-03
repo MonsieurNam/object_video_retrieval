@@ -1,0 +1,83 @@
+
+import pandas as pd
+import json
+from pathlib import Path
+from tqdm import tqdm
+import sys
+import time
+
+# --- 1. CONFIGURATION ---
+
+# Đầu vào là CSDL đã được tracking từ Giai đoạn 1.5
+DB_PATH = Path('./deep_tracked_database_v8.feather') 
+TEAM_ID = "AI25-15"
+SUBMISSION_FILE_PATH = Path(f'./{TEAM_ID}.json')
+
+# *** FINAL TUNING PARAMETER ***
+# Ngưỡng tin cậy CƠ BẢN. Các hàm truy vấn sẽ hoạt động trên cột 'adjusted_confidence'
+# và có thể tự điều chỉnh ngưỡng này nếu cần.
+FINAL_CONFIDENCE_THRESHOLD = 0.1
+
+# --- 2. MAIN SCRIPT ---
+
+def create_final_submission_v9():
+    """Hàm chính điều phối toàn bộ quá trình tạo file nộp bài V9."""
+    start_time = time.time()
+    print("--- PHASE 3 (V9): GENERATING FINAL SUBMISSION FILE ---")
+    
+    # --- 2.1. Import và Sanity Checks ---
+    try:
+        # Import thư viện truy vấn V9
+        from query_library_v9 import (
+            preprocess_df_v9, # <<< IMPORT HÀM TIỀN XỬ LÝ MỚI
+            query_1, query_2, query_3, query_4, 
+            query_5, query_6, query_7, query_8_v9 as query_8 # Đổi tên để rõ ràng
+        )
+        print("Successfully imported V9 query library.")
+    except ImportError as e:
+        print(f"\n!!! ERROR: Could not find or import from 'query_library_v9.py'. !!!")
+        print(f"Details: {e}")
+        sys.exit(1)
+
+    print(f"Loading deep tracked database from: {DB_PATH}")
+    if not DB_PATH.exists():
+        print(f"\n!!! ERROR: Database file not found at '{DB_PATH}'. !!!")
+        print("Please run '1.5_build_deep_tracks.py' first.")
+        sys.exit(1)
+        
+    df = pd.read_feather(DB_PATH)
+    print(f"Database loaded successfully with {len(df):,} tracked detections.")
+    
+    # --- 2.2. TIỀN XỬ LÝ V9: BƯỚC QUYẾT ĐỊNH ---
+    df = preprocess_df_v9(df)
+    
+    # --- 2.3. Chạy Các Truy vấn ---
+    print(f"\nApplying final base confidence threshold: {FINAL_CONFIDENCE_THRESHOLD}")
+    
+    final_submission = {}
+    query_map = {
+        "1": query_1, "2": query_2, "3": query_3, "4": query_4,
+        "5": query_5, "6": query_6, "7": query_7, "8": query_8
+    }
+    
+    for question_id, query_func in tqdm(query_map.items(), desc="Running all queries"):
+        # Tất cả các hàm truy vấn giờ sẽ chạy trên DataFrame đã được xử lý hoàn chỉnh
+        result = query_func(df, FINAL_CONFIDENCE_THRESHOLD)
+        final_submission[question_id] = result
+        
+    # --- 2.4. Lưu File Kết quả ---
+    print(f"\nSaving submission file to: {SUBMISSION_FILE_PATH}")
+    try:
+        with open(SUBMISSION_FILE_PATH, 'w', encoding='utf8') as f:
+            json.dump(final_submission, f, indent=4)
+        
+        end_time = time.time()
+        print("\n--- COMPLETE! ---")
+        print(f"Submission file '{SUBMISSION_FILE_PATH}' created successfully.")
+        print(f"Total runtime for Phase 3 (V9): {end_time - start_time:.2f} seconds.")
+        print("Proceed to Phase 4 for the final, most insightful visual verification.")
+    except Exception as e:
+        print(f"\n!!! ERROR while saving JSON file: {e}")
+
+if __name__ == "__main__":
+    create_final_submission_v9()
