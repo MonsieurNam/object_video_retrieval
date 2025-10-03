@@ -56,7 +56,7 @@ def query_4(df: pd.DataFrame, conf: float) -> dict:
     return query_2(df, conf) # Logic giống hệt Q2
 
 def query_5(df: pd.DataFrame, conf: float) -> dict:
-    reliable_df = df[df['confidence'] >= conf]
+    reliable_df = df[df['confidence'] > conf]
     frames_with_person = reliable_df[reliable_df['inferred_class_name'] == 'person'][['video_name', 'frame_id']].drop_duplicates()
     frames_with_moto = reliable_df[reliable_df['inferred_class_name'] == 'motorcycle'][['video_name', 'frame_id']].drop_duplicates()
     frames_with_car = reliable_df[reliable_df['inferred_class_name'] == 'car'][['video_name', 'frame_id']].drop_duplicates()
