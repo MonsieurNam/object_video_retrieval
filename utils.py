@@ -71,3 +71,38 @@ def apply_mask(image: np.ndarray, mask: np.ndarray) -> np.ndarray:
 def cosine_similarity(vec_a: np.ndarray, vec_b: np.ndarray) -> float:
     """Tính độ tương đồng cosine giữa hai vector."""
     return np.dot(vec_a, vec_b) / (np.linalg.norm(vec_a) * np.linalg.norm(vec_b))
+
+def calculate_iou(boxA, boxB):
+    """
+    Tính Intersection over Union (IoU) giữa hai bounding box.
+    Định dạng box: [x1, y1, x2, y2]
+    """
+    # Xác định tọa độ của vùng giao nhau
+    xA = max(boxA[0], boxB[0])
+    yA = max(boxA[1], boxB[1])
+    xB = min(boxA[2], boxB[2])
+    yB = min(boxA[3], boxB[3])
+
+    # Tính diện tích vùng giao nhau
+    interArea = max(0, xB - xA) * max(0, yB - yA)
+    if interArea == 0:
+        return 0.0
+
+    # Tính diện tích của mỗi box
+    boxAArea = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
+    boxBArea = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
+
+    # Tính IoU
+    iou = interArea / float(boxAArea + boxBArea - interArea)
+    return iou
+
+def cosine_similarity(vec_a: np.ndarray, vec_b: np.ndarray) -> float:
+    """
+    Tính độ tương đồng cosine giữa hai vector NumPy.
+    Đảm bảo vector đã được chuẩn hóa (norm L2 = 1).
+    """
+    # Vì các vector feature của CLIP đã được chuẩn hóa,
+    # phép nhân vô hướng (dot product) chính là cosine similarity.
+    sim = np.dot(vec_a, vec_b)
+    # Giới hạn giá trị trong khoảng [-1, 1] để tránh lỗi làm tròn số
+    return np.clip(sim, -1.0, 1.0)
