@@ -9,10 +9,10 @@ OUTPUT_DB_PATH = Path('./tracked_database_v6.feather')
 
 # --- Tham số của Thuật toán Tracking ---
 # Ngưỡng IoU tối thiểu để coi hai box là cùng một đối tượng
-IOU_THRESHOLD = 0.5 
+IOU_THRESHOLD = 0.55 
 # Số frame tối đa một track có thể bị "mất dấu" trước khi bị coi là kết thúc.
 # Ví dụ: nếu một xe bị che khuất trong 3 frame rồi xuất hiện lại, nó vẫn được giữ lại track cũ.
-MAX_FRAMES_TO_LOSE_TRACK = 5
+MAX_FRAMES_TO_LOSE_TRACK = 250
 
 # --- 2. HÀM TIỆN ÍCH ---
 

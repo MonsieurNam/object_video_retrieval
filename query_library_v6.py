@@ -16,6 +16,8 @@ from tqdm import tqdm
 import random
 import numpy as np
 
+from build_trackv6 import calculate_iou
+
 # Tắt các cảnh báo không cần thiết
 # warnings.filterwarnings('ignore', category=pd.core.common.SettingWithCopyWarning)
 # warnings.filterwarnings('ignore', category=FutureWarning)
@@ -47,7 +49,7 @@ def preprocess_df_with_tracking(df: pd.DataFrame) -> pd.DataFrame:
 
 # --- 2. HÀM HẬU XỬ LÝ (POST-PROCESSING) ---
 
-def fill_gaps(frame_list: list, max_gap_size: int = 15) -> list:
+def fill_gaps(frame_list: list, max_gap_size: int = 10) -> list:
     """Lấp đầy các khoảng trống nhỏ trong một danh sách frame đã được sắp xếp."""
     if len(frame_list) < 2:
         return frame_list
@@ -133,8 +135,75 @@ def query_3(df: pd.DataFrame, conf: float) -> dict:
     if result_df.empty: return {}
     return apply_post_processing(to_final_dict(result_df.groupby('video_name')['frame_id'].unique().apply(list)))
 
-def query_4(df: pd.DataFrame, conf: float) -> dict:
-    return query_2(df, conf) # Logic của Q4 mới giống hệt Q2
+def query_4_improved(df: pd.DataFrame, conf: float) -> dict:
+    """
+    Câu 4 NÂNG CAO: Tìm các frame có CHÍNH XÁC MỘT CẶP (người, xe đạp) đang đi cùng nhau
+    và không có người hay xe đạp nào khác trong frame.
+
+    Cải tiến so với phiên bản cũ:
+    - Loại bỏ giả định `num_persons == num_bicycles` không đáng tin cậy.
+    - Logic ghép cặp mạnh mẽ hơn, tìm ra cặp có IoU tốt nhất cho mỗi người.
+    - Đảm bảo rằng frame chỉ chứa đúng một cặp và không có đối tượng "lẻ loi" nào khác.
+    """
+    # Ngưỡng tin cậy có thể cao hơn một chút cho các bài toán đếm
+    counting_conf = max(conf, 0.50) 
+    
+    # Ngưỡng IoU để coi một người và một xe đạp là một "cặp".
+    # Có thể tinh chỉnh giá trị này. 0.1 có nghĩa là cần có sự chồng chéo đáng kể.
+    IOU_RIDING_THRESHOLD = 0.1 
+
+    reliable_df = df[df['confidence'] >= counting_conf]
+    
+    # Tối ưu hóa: chỉ xử lý các frame có cả 'person' và 'bicycle'
+    candidate_frames = reliable_df[reliable_df['consistent_class_name'].isin(['person', 'bicycle'])]
+    
+    final_result_frames = []
+
+    # Lặp qua từng frame ứng viên
+    # Sử dụng `leave=False` để thanh tiến trình không làm rối màn hình khi chạy trong submission script
+    grouped_frames = candidate_frames.groupby(['video_name', 'frame_id'])
+    for (video_name, frame_id), frame_group in tqdm(grouped_frames, desc="Query 4 (Improved Spatial Check)", leave=False):
+        
+        persons = frame_group[frame_group['consistent_class_name'] == 'person']
+        bicycles = frame_group[frame_group['consistent_class_name'] == 'bicycle']
+        
+        # Bỏ qua ngay nếu thiếu một trong hai loại đối tượng
+        if persons.empty or bicycles.empty:
+            continue
+
+        # Lấy ra các track duy nhất trong frame này để tránh đếm đúp
+        person_tracks = {track_id: group.iloc[0]['bbox'] for track_id, group in persons.groupby('track_id')}
+        bicycle_tracks = {track_id: group.iloc[0]['bbox'] for track_id, group in bicycles.groupby('track_id')}
+        
+        num_persons = len(person_tracks)
+        num_bicycles = len(bicycle_tracks)
+
+        # --- LOGIC CỐT LÕI MỚI ---
+        # Chỉ xem xét nếu có khả năng tạo thành một cặp duy nhất
+        if num_persons != 1 or num_bicycles != 1:
+            continue
+
+        # Bây giờ chúng ta biết chắc chắn chỉ có 1 người và 1 xe đạp.
+        # Chỉ cần kiểm tra xem chúng có "gắn kết" với nhau không.
+        person_bbox = list(person_tracks.values())[0]
+        bicycle_bbox = list(bicycle_tracks.values())[0]
+
+        iou = calculate_iou(person_bbox, bicycle_bbox)
+        
+        # Điều kiện cuối cùng: có đúng 1 người, 1 xe đạp, và chúng có tương tác vật lý (IoU > ngưỡng)
+        if iou > IOU_RIDING_THRESHOLD:
+             final_result_frames.append({'video_name': video_name, 'frame_id': frame_id})
+
+    if not final_result_frames: 
+        return {}
+    
+    result_df = pd.DataFrame(final_result_frames)
+    grouped = result_df.groupby('video_name')['frame_id'].unique().apply(list)
+    
+    # Áp dụng hậu xử lý và chuyển đổi sang định dạng cuối cùng
+    final_dict = grouped.apply(lambda lst: sorted([int(i) for i in lst])).to_dict()
+    return apply_post_processing(final_dict) # Áp dụng fill_gaps
+
 
 def query_5(df: pd.DataFrame, conf: float) -> dict:
     reliable_df = df[df['confidence'] >= conf]
