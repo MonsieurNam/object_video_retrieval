@@ -1,3 +1,4 @@
+
 import pandas as pd
 import json
 from pathlib import Path
@@ -6,8 +7,7 @@ import numpy as np
 import sys
 from tqdm import tqdm
 import math
-from concurrent.futures import ProcessPoolExecutor, as_completed
-import os
+import gc
 
 # --- 1. CONFIGURATION ---
 
@@ -21,14 +21,12 @@ BASE_CONF = 0.25
 COUNTING_CONF_BASE = 0.50
 STRICT_COUNTING_CONF_BASE = 0.65
 
-# --- Cấu hình Báo cáo & Song song hóa ---
+# --- Cấu hình Báo cáo ---
 IMAGES_PER_ROW = 5
 ROWS_PER_SHEET = 8
 THUMBNAIL_MAX_W = 480; THUMBNAIL_MAX_H = 270
 SAVE_FORMAT = 'webp'; WEBP_QUALITY = 85
 SHOW_TILE_LABEL = True; LABEL_POS = "bottom"; LABEL_ALPHA = 0.7
-try: NUM_WORKERS = max(1, os.cpu_count() - 2)
-except: NUM_WORKERS = 4
 
 QUERY_DESCRIPTIONS = {
     "1": "Người VÀ Xe gắn máy", "2": "Người VÀ Xe đạp", "3": "Xe ô tô",
@@ -36,56 +34,45 @@ QUERY_DESCRIPTIONS = {
     "6": "Nhiều hơn 1 Người", "7": "Nhiều hơn 1 Xe máy", "8": "CHỈ có 3 Người"
 }
 
-# --- 2. HÀM WORKER VÀ CÁC HÀM TIỆN ÍCH LIÊN QUAN (ĐẦY ĐỦ) ---
+# --- 2. CÁC LỚP VÀ HÀM TIỆN ÍCH (Phiên bản Tuần tự) ---
 
-# Các biến toàn cục sẽ được khởi tạo một lần cho mỗi tiến trình con
-_df_global = None
-_video_root_global = None
-_track_colors_global = None
-
-def init_worker_v8(db_path, video_root):
-    """Hàm khởi tạo, tải và tiền xử lý CSDL một lần cho mỗi worker."""
-    global _df_global, _video_root_global, _track_colors_global
-    cv2.setNumThreads(1)
-    
-    df = pd.read_feather(db_path)
-    
-    track_class_map = df.groupby('track_id')['class_name'].agg(lambda x: x.mode()[0])
-    df['consistent_class_name'] = df['track_id'].map(track_class_map)
-    
-    _df_global = df
-    _video_root_global = video_root
-    
-    np.random.seed(42)
-    max_track_id = df['track_id'].max() if not df.empty else 0
-    _track_colors_global = np.random.randint(60, 255, size=(max_track_id + 1, 3), dtype=np.uint8)
-
-def _find_video_path(video_name: str, root: Path) -> Path | None:
+_video_path_cache = {}
+def find_video_path(video_name: str, root: Path) -> Path | None:
+    if video_name in _video_path_cache: return _video_path_cache[video_name]
     try:
-        p = root / video_name
-        if p.exists(): return p
-        return next(root.rglob(f"**/{video_name}"))
+        path = next(root.rglob(f"**/{video_name}"))
+        _video_path_cache[video_name] = path
+        return path
     except StopIteration: return None
 
-def _draw_detections_v8(frame_bgr, frame_id, video_name, question_id):
-    global _df_global, _track_colors_global
-    detections = _df_global[(_df_global['video_name'] == video_name) & (_df_global['frame_id'] == frame_id)]
+class VideoReaderPool:
+    def __init__(self, max_open=8):
+        self.max_open, self.pool = max_open, {}
+    def get(self, video_path: Path):
+        key = str(video_path)
+        if key in self.pool:
+            cap = self.pool.pop(key); self.pool[key] = cap; return cap
+        if len(self.pool) >= self.max_open:
+            old_key = next(iter(self.pool)); old_cap = self.pool.pop(old_key); old_cap.release()
+        cap = cv2.VideoCapture(str(video_path)); self.pool[key] = cap; return cap
+    def close_all(self):
+        for cap in self.pool.values(): cap.release()
+        self.pool.clear()
 
+def draw_detections_v8(frame_bgr, det_rows, question_id, track_colors):
+    """Hàm vẽ bbox V8, tô màu theo track_id và hiển thị nhãn đã suy luận."""
     conf_threshold = BASE_CONF
     if question_id in "67": conf_threshold = COUNTING_CONF_BASE
     elif question_id in "48": conf_threshold = STRICT_COUNTING_CONF_BASE
 
-    for _, det in detections.iterrows():
+    for _, det in det_rows.iterrows():
         if det['confidence'] < conf_threshold: continue
             
         x1, y1, x2, y2 = [int(c) for c in det['bbox']]
+        inferred_cls, original_cls = det['consistent_class_name'], det['class_name']
+        conf, track_id = det['confidence'], int(det['track_id'])
         
-        inferred_cls = det['consistent_class_name']
-        original_cls = det['class_name']
-        conf = det['confidence']
-        track_id = int(det['track_id'])
-        
-        color = _track_colors_global[track_id % len(_track_colors_global)].tolist()
+        color = track_colors[track_id % len(track_colors)].tolist()
         
         label = f"T{track_id}:{inferred_cls}:{conf:.2f}"
         if inferred_cls != original_cls:
@@ -95,20 +82,24 @@ def _draw_detections_v8(frame_bgr, frame_id, video_name, question_id):
         cv2.putText(frame_bgr, label, (x1, max(0, y1 - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2, cv2.LINE_AA)
     return frame_bgr
 
-def _read_frame_annotated_v8(video_name, frame_id, question_id):
-    video_path = _find_video_path(video_name, _video_root_global)
+def read_frame_annotated_v8(pool, df_idx, video_name, frame_id, question_id, track_colors):
+    """Hàm đọc và chú thích frame phiên bản V8."""
+    video_path = find_video_path(video_name, VIDEO_SOURCE_DIR)
     if not video_path: return None
     
-    cap = cv2.VideoCapture(str(video_path))
+    cap = pool.get(video_path)
     cap.set(cv2.CAP_PROP_POS_FRAMES, frame_id)
     ok, frame = cap.read()
-    cap.release()
     if not ok: return None
 
-    frame = _draw_detections_v8(frame, frame_id, video_name, question_id)
+    rows = df_idx.get((video_name, frame_id))
+    if rows is not None and not rows.empty:
+        frame = draw_detections_v8(frame, rows, question_id, track_colors)
+        
     return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-def _make_thumbnail(img, max_w, max_h):
+
+def make_thumbnail(img, max_w, max_h):
     h, w = img.shape[:2]
     scale = min(max_w / w, max_h / h) if w > 0 and h > 0 else 0
     if scale == 0: return np.zeros((max_h, max_w, 3), dtype=np.uint8)
@@ -119,7 +110,7 @@ def _make_thumbnail(img, max_w, max_h):
     canvas[y0:y0+nh, x0:x0+nw] = resized
     return canvas
 
-def _draw_tile_label(img, text):
+def draw_tile_label(img, text):
     h, w = img.shape[:2]
     font, scale, thick = cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1
     (tw, th), _ = cv2.getTextSize(text, font, scale, thick)
@@ -149,7 +140,7 @@ def render_single_thumbnail_v8(args):
         # print(f"Worker error on {video_name}, frame {frame_id}: {e}")
         return np.zeros((THUMBNAIL_MAX_H, THUMBNAIL_MAX_W, 3), dtype=np.uint8)
 
-# --- 3. CÁC HÀM TIỆN ÍCH CHO VIỆC TỔNG HỢP (CHẠY TUẦN TỰ) ---
+
 def save_contact_sheet(thumbnails, out_path):
     if not thumbnails: return
     sheet = np.vstack([np.hstack(thumbnails[i:i+IMAGES_PER_ROW]) for i in range(0, len(thumbnails), IMAGES_PER_ROW)])
@@ -163,64 +154,90 @@ def write_html_index(q_dir, pages, title):
     html += "</body></html>"
     (q_dir / "index.html").write_text(html, encoding="utf-8")
 
-# --- 4. SCRIPT ĐIỀU PHỐI CHÍNH ---
-def generate_visual_report_v8():
-    """Hàm chính điều phối toàn bộ quá trình tạo báo cáo V8."""
-    print("=== GENERATING V8 FINAL VISUAL REPORT (with Tracking Consistency) ===")
+# --- 3. SCRIPT ĐIỀU PHỐI CHÍNH (Tuần tự) ---
+def generate_visual_report_v8_sequential():
+    print("=== GENERATING V8 VISUAL REPORT (Sequential & Stable) ===")
     
     if not SUBMISSION_FILE_PATH.exists(): raise FileNotFoundError(f"Submission file not found: {SUBMISSION_FILE_PATH}")
     if not DB_PATH.exists(): raise FileNotFoundError(f"Database file not found: {DB_PATH}")
 
+    print("Loading database (this may take a moment)...")
+    df = pd.read_feather(DB_PATH)
+    
+    # *** TIỀN XỬ LÝ V8 NGAY TẠI ĐÂY ***
+    print("Preprocessing database: Voting for consistent track identity...")
+    track_class_map = df.groupby('track_id')['class_name'].agg(lambda x: x.mode()[0])
+    df['consistent_class_name'] = df['track_id'].map(track_class_map)
+    
+    print("Indexing database for fast access...")
+    df_idx = {k: v for k, v in df.groupby(['video_name', 'frame_id'])}
+    
+    # Tạo bảng màu cho các tracks
+    np.random.seed(42)
+    max_track_id = df['track_id'].max() if not df.empty else 0
+    track_colors = np.random.randint(60, 255, size=(max_track_id + 1, 3), dtype=np.uint8)
+
+    print("Loading submission file...")
     with open(SUBMISSION_FILE_PATH, 'r') as f: submission = json.load(f)
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     total_per_sheet = IMAGES_PER_ROW * ROWS_PER_SHEET
+    pool = VideoReaderPool(max_open=8)
 
-    for q_id, results in submission.items():
-        desc = QUERY_DESCRIPTIONS.get(str(q_id), f"Question {q_id}")
-        print("\n" + "="*80)
-        print(f"[Q{q_id}] {desc}")
+    try:
+        for q_id, results in submission.items():
+            desc = QUERY_DESCRIPTIONS.get(str(q_id), f"Question {q_id}")
+            print("\n" + "="*80)
+            print(f"[Q{q_id}] {desc}")
 
-        frames_to_process = sorted([(v_name, int(fid)) for v_name, f_list in (results or {}).items() for fid in f_list])
-        num_total = len(frames_to_process)
-        if num_total == 0:
-            print("→ Không có kết quả nào để hiển thị."); continue
-        
-        n_pages = math.ceil(num_total / total_per_sheet)
-        print(f"→ Tổng số {num_total} khung hình. Sẽ tạo {n_pages} trang báo cáo sử dụng {NUM_WORKERS} workers.")
-        
-        q_dir = OUTPUT_DIR / f"Q{q_id}"
-        q_dir.mkdir(parents=True, exist_ok=True)
-        
-        job_args = [(video_name, fid, q_id) for (video_name, fid) in frames_to_process]
-        thumbnails_all = [None] * num_total
-        
-        with ProcessPoolExecutor(max_workers=NUM_WORKERS, initializer=init_worker_v8, initargs=(DB_PATH, VIDEO_SOURCE_DIR)) as executor:
-            future_to_idx = {executor.submit(render_single_thumbnail_v8, arg): i for i, arg in enumerate(job_args)}
-            for future in tqdm(as_completed(future_to_idx), total=num_total, desc=f"  -> Rendering Q{q_id}"):
-                idx = future_to_idx[future]
-                try: thumbnails_all[idx] = future.result()
-                except Exception as exc:
-                    print(f"Job {idx} generated an exception: {exc}")
-                    thumbnails_all[idx] = np.zeros((THUMBNAIL_MAX_H, THUMBNAIL_MAX_W, 3), dtype=np.uint8)
-
-        print("  -> Đang ghép ảnh và lưu báo cáo...")
-        pages_paths = []
-        for page_idx in range(n_pages):
-            batch_thumbnails = thumbnails_all[page_idx*total_per_sheet : (page_idx+1)*total_per_sheet]
-            while len(batch_thumbnails) < total_per_sheet:
-                batch_thumbnails.append(np.zeros((THUMBNAIL_MAX_H, THUMBNAIL_MAX_W, 3), dtype=np.uint8))
+            frames_to_process = sorted([(v_name, int(fid)) for v_name, f_list in (results or {}).items() for fid in f_list])
+            num_total = len(frames_to_process)
+            if num_total == 0:
+                print("→ Không có kết quả nào để hiển thị."); continue
             
-            out_name = f"Q{q_id}_page_{page_idx+1:03d}.{SAVE_FORMAT}"
-            out_path = q_dir / out_name
-            save_contact_sheet(batch_thumbnails, out_path)
-            pages_paths.append(out_path)
+            n_pages = math.ceil(num_total / total_per_sheet)
+            print(f"→ Tổng số {num_total} khung hình. Sẽ tạo {n_pages} trang báo cáo.")
             
-        write_html_index(q_dir, pages_paths, f"Visual Results for Q{q_id}: {desc}")
-        print(f"→ Báo cáo đã được tạo tại: {q_dir/'index.html'}")
+            q_dir = OUTPUT_DIR / f"Q{q_id}"
+            q_dir.mkdir(parents=True, exist_ok=True)
+            pages_paths = []
+            
+            pbar = tqdm(total=num_total, desc=f"  -> Rendering Q{q_id}", ncols=100)
+            
+            for page_idx in range(n_pages):
+                batch = frames_to_process[page_idx*total_per_sheet : (page_idx+1)*total_per_sheet]
+                thumbnails = []
+                for (video_name, fid) in batch:
+                    # Gọi hàm đọc frame tuần tự
+                    img = read_frame_annotated_v8(pool, df_idx, video_name, fid, q_id, track_colors)
+                    
+                    thumb = make_thumbnail(img if img is not None else np.zeros((THUMBNAIL_MAX_H, THUMBNAIL_MAX_W, 3), dtype=np.uint8), THUMBNAIL_MAX_W, THUMBNAIL_MAX_H)
+                    if SHOW_TILE_LABEL:
+                        thumb = draw_tile_label(thumb, f"{Path(video_name).stem} | F{int(fid)}")
+                    thumbnails.append(thumb)
+                    pbar.update(1)
+
+                # Điền các ô trống trên trang cuối cùng
+                while len(thumbnails) < total_per_sheet:
+                    thumbnails.append(np.zeros((THUMBNAIL_MAX_H, THUMBNAIL_MAX_W, 3), dtype=np.uint8))
+
+                out_name = f"Q{q_id}_page_{page_idx+1:03d}.{SAVE_FORMAT}"
+                out_path = q_dir / out_name
+                save_contact_sheet(thumbnails, out_path)
+                pages_paths.append(out_path)
+                
+                del thumbnails
+                gc.collect()
+
+            pbar.close()
+            write_html_index(q_dir, pages_paths, f"Visual Results for Q{q_id}: {desc}")
+            print(f"→ Báo cáo đã được tạo tại: {q_dir/'index.html'}")
+
+    finally:
+        pool.close_all()
 
     print("\n" + "="*80)
-    print("✓ HOÀN TẤT. Mở các file index.html trong thư mục:", str(OUTPUT_DIR))
+    print("✓ HOÀN TẤT.")
 
 if __name__ == "__main__":
-    generate_visual_report_v8()
+    generate_visual_report_v8_sequential()

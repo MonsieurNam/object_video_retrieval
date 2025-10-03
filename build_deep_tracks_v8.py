@@ -20,31 +20,37 @@ MAX_AGE = 15         # Số frame tối đa một track có thể bị mất d�
 
 # --- 2. LỚP CẤU TRÚC DỮ LIỆU TRACK ---
 class Track:
-    """Lớp để lưu trữ và quản lý thông tin của một đường đi (track)."""
     def __init__(self, detection_row, track_id: int):
         self.id = track_id
-        self.detection_indices = {detection_row.name} # Dùng set để lưu index
-        self.last_update_frame = detection_row['frame_id']
-        self.last_bbox = detection_row['bbox']
+        
+        # --- DÒNG SỬA ---
+        # Thay vì .name, dùng .Index
+        self.detection_indices = {detection_row.Index} 
+        
+        self.last_update_frame = detection_row.frame_id
+        self.last_bbox = detection_row.bbox
         self.age = 0
-        self.avg_feature = detection_row['clip_feature'].copy() # Tạo bản sao
-        self.class_histogram = {detection_row['class_name']: 1}
+        self.avg_feature = np.array(detection_row.clip_feature, copy=True) # Sửa thêm: đảm bảo là numpy array
+        self.class_histogram = {detection_row.class_name: 1}
 
     def update(self, detection_row):
-        """Cập nhật track với một phát hiện mới."""
-        self.detection_indices.add(detection_row.name)
-        self.last_update_frame = detection_row['frame_id']
-        self.last_bbox = detection_row['bbox']
+        # --- DÒNG SỬA ---
+        self.detection_indices.add(detection_row.Index)
+        
+        self.last_update_frame = detection_row.frame_id
+        self.last_bbox = detection_row.bbox
         self.age = 0
         
-        alpha = 0.2 # Trọng số cho feature mới
-        self.avg_feature = (1 - alpha) * self.avg_feature + alpha * detection_row['clip_feature']
+        alpha = 0.2
+        new_feature = np.array(detection_row.clip_feature) # Sửa thêm
+        self.avg_feature = (1 - alpha) * self.avg_feature + alpha * new_feature
         self.avg_feature /= np.linalg.norm(self.avg_feature)
         
-        cls_name = detection_row['class_name']
+        cls_name = detection_row.class_name
         self.class_histogram[cls_name] = self.class_histogram.get(cls_name, 0) + 1
-
+        
     def increment_age(self):
+        """Tăng tuổi của track lên 1."""
         self.age += 1
 
 # --- 3. MAIN SCRIPT ---
