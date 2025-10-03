@@ -16,7 +16,7 @@ OUTPUT_DB_PATH = Path('./deep_tracked_database_v8.feather')
 W_SPATIAL = 0.3      # Trọng số cho chi phí vị trí (1 - IoU)
 W_APPEARANCE = 0.7   # Trọng số cho chi phí diện mạo (1 - Cosine Sim)
 COST_THRESHOLD = 0.6 # Ngưỡng chi phí tối đa để coi là một cặp khớp
-MAX_AGE = 15         # Số frame tối đa một track có thể bị mất dấu trước khi bị xóa
+MAX_AGE = 100         # Số frame tối đa một track có thể bị mất dấu trước khi bị xóa
 
 # --- 2. LỚP CẤU TRÚC DỮ LIỆU TRACK ---
 class Track:
