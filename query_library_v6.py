@@ -135,7 +135,7 @@ def query_3(df: pd.DataFrame, conf: float) -> dict:
     if result_df.empty: return {}
     return apply_post_processing(to_final_dict(result_df.groupby('video_name')['frame_id'].unique().apply(list)))
 
-def query_4_improved(df: pd.DataFrame, conf: float) -> dict:
+def query_4(df: pd.DataFrame, conf: float) -> dict:
     """
     Câu 4 NÂNG CAO: Tìm các frame có CHÍNH XÁC MỘT CẶP (người, xe đạp) đang đi cùng nhau
     và không có người hay xe đạp nào khác trong frame.
