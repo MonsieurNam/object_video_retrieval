@@ -7,9 +7,9 @@ import time
 from query_library_v6 import preprocess_df_with_tracking
 # --- 1. CONFIGURATION ---
 
-DB_PATH = Path('./tracked_database_v6.feather')
+DB_PATH = Path('./tracked_database_v6_5.feather')
 TEAM_ID = "AI25-15"
-SUBMISSION_FILE_PATH = Path(f'./{TEAM_ID}.json')
+SUBMISSION_FILE_PATH = Path(f'./{TEAM_ID}_v6_5.json')
 
 # *** FINAL TUNING PARAMETER ***
 # This is the base confidence threshold.
