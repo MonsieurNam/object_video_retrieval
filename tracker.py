@@ -113,6 +113,51 @@ class Track:
         """Lấy bbox được dự đoán từ bộ lọc Kalman."""
         return z_to_bbox(self.kf.x)
 
+    def mahalanobis_distance(self, zs):
+        """
+        Tính khoảng cách Mahalanobis giữa dự đoán của track và các đo lường (zs).
+        (Giữ lại docstring cũ)
+        """
+        # S: Ma trận hiệp phương sai của sự đổi mới (innovation covariance)
+        S = self.kf.H @ self.kf.P @ self.kf.H.T + self.kf.R
+        
+        # y: Sai số (residual) giữa đo lường thực tế và đo lường dự đoán
+        predicted_z = self.kf.H @ self.kf.x
+        residuals = zs - predicted_z # Shape: (N_detections, 4, 1)
+        
+        try:
+            S_inv = np.linalg.inv(S)
+            
+            # ==========================================================
+            # === THAY ĐỔI CỐT LÕI ĐỂ SỬA LỖI ==========================
+            # ==========================================================
+            
+            # Cách tính cũ (gây lỗi):
+            # mahal_squared = np.einsum('ij,jk,ik->i', residuals.transpose(0, 2, 1), S_inv, residuals)
+            
+            # Cách tính mới (đơn giản và đúng):
+            # 1. Tính S_inv @ y cho tất cả y
+            #    (4, 4) @ (N, 4, 1) -> cần reshape residuals
+            #    temp.shape sẽ là (N, 4, 1)
+            temp = S_inv @ residuals.squeeze(-1).T # squeeze để bỏ chiều 1, T để chuyển vị
+            
+            # 2. Tính y.T @ (S_inv @ y)
+            #    (N, 1, 4) @ (N, 4, 1) -> cần reshape lại
+            #    Sử dụng np.sum và phép nhân element-wise sẽ an toàn hơn
+            
+            # CÁCH TÍNH AN TOÀN VÀ RÕ RÀNG NHẤT
+            mahal_squared = []
+            for i in range(residuals.shape[0]):
+                residual_i = residuals[i] # Shape (4, 1)
+                # y.T @ S_inv @ y
+                dist = residual_i.T @ S_inv @ residual_i
+                mahal_squared.append(dist[0, 0])
+            
+            return np.sqrt(np.array(mahal_squared))
+
+        except np.linalg.LinAlgError:
+            return np.full(residuals.shape[0], np.inf)
+
     def is_confirmed(self):
         return self.state == 'Confirmed'
     
@@ -127,7 +172,7 @@ class DeepSORTTracker:
         self.lambda_val = lambda_val
         self.tracks = []
         self.next_id = 0
-
+    
     def _cosine_distance(self, features_a, features_b):
         """Tính toán khoảng cách cosine giữa hai bộ đặc trưng."""
         # 1 - similarity để có distance, vì thuật toán Hungary tìm chi phí nhỏ nhất
@@ -158,11 +203,21 @@ class DeepSORTTracker:
         if n_tracks == 0 or n_dets == 0:
             return np.empty((0, 0))
         
+        # Chuẩn bị sẵn một mảng chứa tất cả các vector đo lường z
+        # để tính toán hiệu quả hơn, thay vì tính lặp đi lặp lại trong vòng lặp
+        all_z_vectors = np.asarray([bbox_to_z(d['bbox']) for d in detections])
+        
         cost_matrix = np.zeros((n_tracks, n_dets))
         for i, track in enumerate(tracks):
-            # Khoảng cách Mahalanobis từ bộ lọc Kalman
-            # Nó đo lường "mức độ bất ngờ" của một phát hiện mới so với dự đoán
-            cost_matrix[i, :] = track.kf.mahlanobis(np.array([bbox_to_z(d['bbox']) for d in detections]))
+            # ==========================================================
+            # === THAY ĐỔI CỐT LÕI ĐỂ SỬA LỖI ==========================
+            # ==========================================================
+            # Lời gọi hàm sai:
+            # cost_matrix[i, :] = track.kf.mahalanobis(np.array([bbox_to_z(d['bbox']) for d in detections]))
+            
+            # Lời gọi hàm đúng:
+            cost_matrix[i, :] = track.mahalanobis_distance(all_z_vectors)
+            
         return cost_matrix
 
     def update(self, detections_in_frame: list):
