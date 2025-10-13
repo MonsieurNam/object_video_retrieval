@@ -35,3 +35,6 @@ tqdm>=4.65.0
 # For interactive development environments
 ipykernel
 jupyter
+gradio
+google-generativeai
+python-dotenv

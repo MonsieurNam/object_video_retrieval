@@ -6,13 +6,60 @@ from ultralytics import YOLO
 from transformers import CLIPProcessor, CLIPModel
 from segment_anything import sam_model_registry, SamPredictor
 
-def load_all_models(yolo_name, clip_name, sam_type, sam_checkpoint_path, device):
+def predict_with_adapter(yolo_model, frame, **kwargs) -> list:
+    """
+    Thực hiện dự đoán và chuẩn hóa kết quả về một định dạng chung.
+    Hàm này đóng vai trò là lớp tương thích cho các phiên bản YOLO khác nhau.
+    
+    Returns:
+        list[dict]: Một danh sách các dictionaries, mỗi dict chứa:
+                    {'class_name': str, 'confidence': float, 'bbox': list[int]}
+    """
+    # Sử dụng .predict() vì nó an toàn và được hỗ trợ bởi cả hai phiên bản
+    results = yolo_model.predict(frame, **kwargs)
+    
+    normalized_output = []
+    if not results:
+        return normalized_output
+        
+    # results là một list, thường chỉ có 1 phần tử cho 1 ảnh
+    for res in results:
+        if res.boxes is None:
+            continue
+            
+        class_names = res.names
+        for box in res.boxes:
+            # [QUAN TRỌNG] Xử lý các kiểu dữ liệu khác nhau như bạn đã phân tích
+            # Đảm bảo confidence là float và class_id là int
+            conf = float(box.conf[0])
+            class_id = int(box.cls[0])
+            
+            det_info = {
+                'class_name': class_names[class_id],
+                'confidence': conf,
+                'bbox': [int(c) for c in box.xyxy[0].tolist()]
+            }
+            normalized_output.append(det_info)
+            
+    return normalized_output
+
+def load_all_models(yolo_name, clip_name, sam_type, sam_checkpoint_path, device, models_dir: Path):
     """Tải tất cả các model cần thiết và đưa lên device."""
     print("--- Đang tải các model AI ---")
     
-    # Tải YOLO
-    print(f"YOLO: {yolo_name}")
-    yolo_model = YOLO(yolo_name).to(device)
+    # [NÂNG CẤP] Logic tải YOLO thông minh
+    if 'yolov12' in yolo_name.lower():
+        print(f"YOLOv12: Đang tải model từ repo 'sunsmarterjie'...")
+        try:
+            # Import cục bộ để tránh lỗi nếu repo chưa được clone
+            from yolov12 import YOLOv12
+            yolo_model = YOLOv12(models_dir / yolo_name).to(device)
+            print(" -> Tải YOLOv12 thành công.")
+        except ImportError:
+            raise ImportError("Không thể import YOLOv12. Bạn đã clone repo 'https://github.com/sunsmarterjie/yolov12' chưa?")
+    else:
+        print(f"YOLO (Ultralytics): {yolo_name}")
+        yolo_model = YOLO(models_dir / yolo_name).to(device)
     
     # Tải CLIP
     print(f"CLIP: {clip_name}")
