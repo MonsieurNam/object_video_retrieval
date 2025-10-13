@@ -52,7 +52,7 @@ def load_all_models(yolo_name, clip_name, sam_type, sam_checkpoint_path, device,
         print(f"YOLOv12: Đang tải model từ repo 'sunsmarterjie'...")
         try:
             # Import cục bộ để tránh lỗi nếu repo chưa được clone
-            from yolov12 import YOLOv12
+            from ultralytics import YOLO as YOLOv12
             yolo_model = YOLOv12(models_dir / yolo_name).to(device)
             print(" -> Tải YOLOv12 thành công.")
         except ImportError:
@@ -63,8 +63,8 @@ def load_all_models(yolo_name, clip_name, sam_type, sam_checkpoint_path, device,
     
     # Tải CLIP
     print(f"CLIP: {clip_name}")
-    clip_model = CLIPModel.from_pretrained(clip_name).to(device)
-    clip_processor = CLIPProcessor.from_pretrained(clip_name)
+    clip_processor = CLIPProcessor.from_pretrained(clip_name, use_safetensors=True)
+    clip_model = CLIPModel.from_pretrained(clip_name, use_safetensors=True)
     
     # Tải SAM
     print(f"SAM: {sam_type}")
