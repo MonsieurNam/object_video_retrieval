@@ -77,14 +77,24 @@ def load_all_models(yolo_name, clip_name, sam_type, sam_checkpoint_path, device,
     return yolo_model, clip_model, clip_processor, sam_predictor
 
 def get_clip_text_features(text_list, clip_model, clip_processor, device):
-    """Tạo vector đặc trưng cho một danh sách văn bản."""
+    """Sinh vector đặc trưng văn bản (fix lỗi device mismatch hoàn toàn)."""
     with torch.no_grad():
-        inputs = clip_processor(
-            text=text_list, return_tensors="pt", padding=True
-        ).to(device)
+        # Không .to(device) ở đây
+        inputs = clip_processor(text=text_list, return_tensors="pt", padding=True)
+
+        # Bắt buộc: di chuyển từng tensor sang cùng device
+        for k, v in inputs.items():
+            if isinstance(v, torch.Tensor):
+                inputs[k] = v.to(device)
+
+        clip_model = clip_model.to(device)
         text_features = clip_model.get_text_features(**inputs)
-        text_features /= text_features.norm(p=2, dim=-1, keepdim=True)
-    return text_features.cpu() # Giữ trên CPU để dễ dàng gán
+        text_features = text_features / text_features.norm(p=2, dim=-1, keepdim=True)
+
+    # Chuyển kết quả về CPU cho an toàn
+    return text_features.cpu()
+
+
 
 def get_clip_image_features(image_list, clip_model, clip_processor, device, batch_size=64):
     """Tạo vector đặc trưng cho một danh sách hình ảnh theo batch."""
