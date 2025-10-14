@@ -68,14 +68,18 @@ def calculate_iou(boxA, boxB):
     iou = interArea / float(boxAArea + boxBArea - interArea)
     return iou
 
-def get_dominant_color(clip_feature_vector: np.ndarray, color_features_tensor: torch.Tensor, color_names: list, device: str) -> str:
-    """So sánh feature của ảnh với các feature màu và trả về màu có độ tương đồng cao nhất."""
-    if clip_feature_vector is None or clip_feature_vector.size == 0:
-        return "unknown"
-    image_tensor = torch.from_numpy(clip_feature_vector).to(device).unsqueeze(0)
-    similarities = F.cosine_similarity(image_tensor, color_features_tensor)
-    best_match_index = torch.argmax(similarities).item()
-    return color_names[best_match_index]
+def get_dominant_color(image_feature, color_features_tensor, color_names, device):
+    """Xác định màu sắc chủ đạo của ảnh dựa vào vector CLIP."""
+    # Đưa image_feature về tensor và cùng device
+    image_tensor = torch.tensor(image_feature, dtype=torch.float32).to(device)
+    color_features_tensor = color_features_tensor.to(device)
+
+    with torch.no_grad():
+        similarities = F.cosine_similarity(image_tensor.unsqueeze(0), color_features_tensor)
+        dominant_idx = similarities.argmax().item()
+        dominant_color = color_names[dominant_idx]
+    
+    return dominant_color
 
 # --- 3. LOGIC CHÍNH ---
 
