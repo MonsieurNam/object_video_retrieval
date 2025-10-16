@@ -81,6 +81,15 @@ def get_dominant_color(image_feature, color_features_tensor, color_names, device
     
     return dominant_color
 
+def resize_frame(frame, max_size=640):
+    height, width = frame.shape[:2]
+    if height > max_size or width > max_size:
+        scale = max_size / max(height, width)
+        new_width = int(width * scale)
+        new_height = int(height * scale)
+        frame = cv2.resize(frame, (new_width, new_height))
+    return frame
+
 # --- 3. LOGIC CHÍNH ---
 
 def build_god_database():
@@ -118,6 +127,8 @@ def build_god_database():
             while cap.isOpened():
                 ret, frame = cap.read()
                 if not ret: break
+
+                frame = resize_frame(frame) 
 
                 # 1. Thu thập và Phân loại bằng YOLO
                 # results = yolo.predict(frame, conf=RAW_CONFIDENCE_THRESHOLD, classes=TARGET_CLASS_IDS, device=device, verbose=False)
@@ -192,6 +203,8 @@ def build_god_database():
                         all_detections_raw.extend(detections_for_frame)
 
                 frame_id += 1
+                # if frame_id >5 :
+                #     break
                 pbar.update(1)
             
             cap.release()
