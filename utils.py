@@ -43,37 +43,60 @@ def predict_with_adapter(yolo_model, frame, **kwargs) -> list:
             
     return normalized_output
 
-def load_all_models(yolo_name, clip_name, sam_type, sam_checkpoint_path, device, models_dir: Path):
-    """Tải tất cả các model cần thiết và đưa lên device."""
+def load_all_models(
+    yolo_name, 
+    clip_name, 
+    sam_type, 
+    sam_checkpoint_path, 
+    device, 
+    models_dir: Path,
+    load_yolo: bool = True,
+    load_clip: bool = True,
+    load_sam: bool = True
+):
+    """
+    Tải tất cả hoặc một phần các model cần thiết và đưa lên device.
+    Phiên bản này hỗ trợ logic tải YOLOv12 thông minh và tải có chọn lọc.
+    """
     print("--- Đang tải các model AI ---")
     
-    # [NÂNG CẤP] Logic tải YOLO thông minh
-    if 'yolov12' in yolo_name.lower():
-        print(f"YOLOv12: Đang tải model từ repo 'sunsmarterjie'...")
-        try:
-            # Import cục bộ để tránh lỗi nếu repo chưa được clone
-            from ultralytics import YOLO as YOLOv12
-            yolo_model = YOLOv12(models_dir / yolo_name).to(device)
-            print(" -> Tải YOLOv12 thành công.")
-        except ImportError:
-            raise ImportError("Không thể import YOLOv12. Bạn đã clone repo 'https://github.com/sunsmarterjie/yolov12' chưa?")
-    else:
-        print(f"YOLO (Ultralytics): {yolo_name}")
-        yolo_model = YOLO(models_dir / yolo_name).to(device)
+    # Khởi tạo các biến trả về
+    yolo_model = None
+    clip_model = None
+    clip_processor = None
+    sam_predictor = None
+
+    # [CẢI TIẾN] Bọc logic tải YOLO của bạn trong câu lệnh if
+    if load_yolo:
+        if 'yolov12' in yolo_name.lower():
+            print(f"YOLOv12: Đang tải model từ repo 'sunsmarterjie'...")
+            try:
+                # Import cục bộ để tránh lỗi nếu repo chưa được clone
+                # Giả định rằng bạn đã cài đặt thư viện đúng cách
+                yolo_model = YOLO(models_dir / yolo_name).to(device)
+                print(" -> Tải YOLOv12 thành công.")
+            except Exception as e:
+                raise ImportError(f"Lỗi khi tải YOLOv12: {e}. Bạn đã clone và cài đặt repo 'https://github.com/sunsmarterjie/yolov12' chưa?")
+        else:
+            print(f"YOLO (Ultralytics): {yolo_name}")
+            yolo_model = YOLO(models_dir / yolo_name).to(device)
     
-    # Tải CLIP
-    print(f"CLIP: {clip_name}")
-    clip_processor = CLIPProcessor.from_pretrained(clip_name, use_safetensors=True)
-    clip_model = CLIPModel.from_pretrained(clip_name, use_safetensors=True)
+    # [CẢI TIẾN] Bọc logic tải CLIP trong câu lệnh if
+    if load_clip:
+        print(f"CLIP: {clip_name}")
+        # Chuyển model lên device trước
+        clip_model = CLIPModel.from_pretrained(clip_name).to(device)
+        clip_processor = CLIPProcessor.from_pretrained(clip_name)
     
-    # Tải SAM
-    print(f"SAM: {sam_type}")
-    if not sam_checkpoint_path.exists():
-        raise FileNotFoundError(f"Không tìm thấy SAM checkpoint tại: {sam_checkpoint_path}")
-    sam = sam_model_registry[sam_type](checkpoint=sam_checkpoint_path).to(device)
-    sam_predictor = SamPredictor(sam)
+    # [CẢI TIẾN] Bọc logic tải SAM trong câu lệnh if
+    if load_sam:
+        print(f"SAM: {sam_type}")
+        if not sam_checkpoint_path.exists():
+            raise FileNotFoundError(f"Không tìm thấy SAM checkpoint tại: {sam_checkpoint_path}")
+        sam = sam_model_registry[sam_type](checkpoint=sam_checkpoint_path).to(device)
+        sam_predictor = SamPredictor(sam)
     
-    print("--- Tải tất cả model thành công. ---")
+    print("--- Tải model hoàn tất. ---")
     return yolo_model, clip_model, clip_processor, sam_predictor
 
 def get_clip_text_features(text_list, clip_model, clip_processor, device):
