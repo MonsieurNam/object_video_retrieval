@@ -24,8 +24,8 @@ MODELS_DIR = Path('./models/')
 OUTPUT_DB_PATH = Path('./god_database_final.parquet') # Lưu dưới dạng Parquet
 
 # Cấu hình Model
-# YOLO_MODEL_NAME = 'yolov8x.pt' 
-YOLO_MODEL_NAME = 'yolov12n.pt' 
+YOLO_MODEL_NAME = 'yolov8x.pt' 
+# YOLO_MODEL_NAME = 'yolov12n.pt' 
 
 CLIP_MODEL_NAME = "openai/clip-vit-base-patch32"
 SAM_MODEL_TYPE = "vit_h"
