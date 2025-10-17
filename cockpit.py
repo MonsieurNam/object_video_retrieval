@@ -17,7 +17,7 @@ print("--- KHỞI ĐỘNG BUỒNG LÁI AI TÁC CHIẾN (PHIÊN BẢN THI ĐẤU 
 
 # Tải key và kết nối tới Gemini
 load_dotenv(); genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel('gemini-pro')
+model = genai.GenerativeModel('gemini-2.5-flash')
 print("✅ Kết nối tới Gemini API thành công.")
 
 # Tải CSDL
