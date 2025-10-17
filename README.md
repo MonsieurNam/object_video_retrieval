@@ -93,6 +93,7 @@ Pipeline bao gồm **5 giai đoạn chính**, mỗi giai đoạn được triể
       mkdir models
       ```
     - Tải model **SAM ViT-H** từ [repo chính thức](https://github.com/facebookresearch/segment-anything#model-checkpoints).
+    - Tải yolov12 từ [repo sunsmarterjie](https://github.com/sunsmarterjie/yolov12.git)
     - Đặt file `sam_vit_h_4b8939.pth` vào thư mục `models/`.
     - Tải và đặt model YOLO (ví dụ `yolo11x.pt`) vào thư mục gốc hoặc cập nhật đường dẫn trong script.
 

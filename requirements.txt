@@ -5,7 +5,7 @@ torchvision
 torchaudio
 scipy
 # --- Computer Vision ---
-# YOLOv8 object detection framework
+# YOLOv12 object detection framework
 ultralytics>=8.0.0
 # Core library for image/video processing
 opencv-python-headless==4.9.0.80
@@ -35,3 +35,6 @@ tqdm>=4.65.0
 # For interactive development environments
 ipykernel
 jupyter
+gradio
+google-generativeai
+python-dotenv
