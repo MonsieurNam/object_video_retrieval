@@ -54,6 +54,51 @@ print(f"✅ Model CLIP đã sẵn sàng cho suy luận ngữ nghĩa trên thiế
 SUBMISSION_PATH = Path('./AI25-15.json') # Tên file nộp bài
 final_submission = {} # Biến state trong bộ nhớ
 
+def load_answer_for_editing(question_id_to_load):
+    global final_submission
+    if not question_id_to_load:
+        return {"error": "Vui lòng nhập Mã câu hỏi cần tải."}, "Chưa có gì để tải."
+    
+    answer = final_submission.get(question_id_to_load)
+    if answer is None:
+        return {"info": f"Không tìm thấy câu trả lời cho câu hỏi '{question_id_to_load}'."}, f"Không tìm thấy câu trả lời cho câu hỏi '{question_id_to_load}'."
+    
+    return answer, f"Đã tải thành công câu trả lời cho câu hỏi '{question_id_to_load}'."
+
+def update_submission_manually(question_id_to_update, edited_json_content):
+    global final_submission
+    if not question_id_to_update:
+        return "LỖI: Cần Mã câu hỏi để biết câu nào cần cập nhật.", final_submission
+    
+    try:
+        # `edited_json_content` từ gr.JSON là một dict Python đã được parse
+        final_submission[question_id_to_update] = edited_json_content
+        if save_submission_state():
+            status = f"✅ Đã cập nhật và LƯU thủ công câu trả lời cho câu hỏi '{question_id_to_update}'."
+        else:
+            status = "⚠️ LỖI: Không thể lưu file submission sau khi cập nhật thủ công!"
+    except Exception as e:
+        status = f"❌ LỖI khi cập nhật thủ công: {e}"
+        
+    return status, final_submission
+
+# [CRUD] Hàm mới: Xóa một câu trả lời khỏi submission
+def delete_answer(question_id_to_delete):
+    global final_submission
+    if not question_id_to_delete:
+        return "LỖI: Cần Mã câu hỏi để biết câu nào cần xóa.", final_submission
+    
+    if question_id_to_delete in final_submission:
+        del final_submission[question_id_to_delete]
+        if save_submission_state():
+            status = f"✅ Đã XÓA và LƯU thành công câu trả lời cho câu hỏi '{question_id_to_delete}'."
+        else:
+            status = "⚠️ LỖI: Không thể lưu file submission sau khi xóa!"
+    else:
+        status = f"Thông tin: Không tìm thấy câu trả lời cho câu hỏi '{question_id_to_delete}' để xóa."
+        
+    return status, final_submission
+
 def load_submission_state():
     """Tải trạng thái từ file JSON nếu tồn tại."""
     global final_submission
@@ -220,36 +265,61 @@ def execute_code(question_id, manual_code, use_clip_mode, user_query):
 
 # --- 4. GIAO DIỆN GRADIO (PHIÊN BẢN THI ĐẤU) ---
 with gr.Blocks(theme=gr.themes.Monochrome(), title="Buồng lái AI") as app:
-    gr.Markdown("# 🚀 BUỒNG LÁI AI TÁC CHIẾN (V4 - THI ĐẤU) 🚀")
+    gr.Markdown("# 🚀 BUỒNG LÁI AI TÁC CHIẾN (V5 - QUẢN LÝ) 🚀")
     
-    with gr.Row():
-        with gr.Column(scale=2):
-            gr.Markdown("### 1. Ra Lệnh")
-            q_id_input = gr.Textbox(label="Mã câu hỏi", placeholder="Ví dụ: 1")
-            user_query_input = gr.Textbox(label="Yêu cầu truy vấn", placeholder="Ví dụ: tìm xe bus màu xám", lines=3)
-            # [CẢI TIẾN GĐ4] Checkbox kích hoạt chế độ CLIP
-            clip_mode_checkbox = gr.Checkbox(label="Sử dụng Suy luận Ngữ nghĩa (CLIP - Chậm)", info="Dùng cho các câu hỏi phức tạp về hành động, thuộc tính không có sẵn.")
+    with gr.Tabs():
+        with gr.TabItem("Tạo Lệnh & Thi Hành"):
             with gr.Row():
-                # [CẢI TIẾN GĐ4] Nút Clear
-                clear_button = gr.ClearButton(value="Xóa Lệnh")
-                generate_button = gr.Button("Tạo Lệnh (AI)", variant="secondary")
-        
-        with gr.Column(scale=3):
-            gr.Markdown("### 3. Nhật Ký & Trạng Thái")
-            status_log_output = gr.Textbox(label="Nhật ký hệ thống", lines=8, interactive=False)
+                with gr.Column(scale=2):
+                    gr.Markdown("### 1. Ra Lệnh")
+                    q_id_input_main = gr.Textbox(label="Mã câu hỏi", placeholder="Ví dụ: 1")
+                    user_query_input = gr.Textbox(label="Yêu cầu truy vấn", placeholder="Ví dụ: tìm tất cả xe bus màu xám", lines=3)
+                    clip_mode_checkbox = gr.Checkbox(label="Sử dụng Suy luận Ngữ nghĩa (CLIP)", info="Dùng cho các câu hỏi phức tạp.")
+                    with gr.Row():
+                        clear_button_main = gr.ClearButton(value="Xóa Lệnh")
+                        generate_button = gr.Button("Tạo Lệnh (AI)", variant="secondary")
+                
+                with gr.Column(scale=3):
+                    gr.Markdown("### 3. Nhật Ký & Trạng Thái")
+                    status_log_output = gr.Textbox(label="Nhật ký hệ thống", lines=8, interactive=False)
 
-    gr.Markdown("### 2. Tinh Chỉnh & Thi Hành")
-    manual_code_input = gr.Code(label="Bàn làm việc: Code do AI tạo (sửa nếu cần)", language="python", interactive=True)
-    execute_button = gr.Button("Thi Hành & Lưu Kết Quả", variant="primary")
-    
+            gr.Markdown("### 2. Tinh Chỉnh & Thi Hành")
+            manual_code_input = gr.Code(label="Bàn làm việc: Code do AI tạo (sửa nếu cần)", language="python", interactive=True)
+            execute_button = gr.Button("Thi Hành & Lưu Kết Quả", variant="primary")
+
+        # [CRUD] Tab mới dành cho việc chỉnh sửa và xóa
+        with gr.TabItem("Chỉnh sửa & Xóa thủ công"):
+            gr.Markdown("### Quản lý các câu trả lời đã có")
+            with gr.Row():
+                with gr.Column():
+                    q_id_input_manage = gr.Textbox(label="Nhập Mã câu hỏi cần quản lý", placeholder="Ví dụ: 1")
+                    with gr.Row():
+                        load_button = gr.Button("Tải câu trả lời")
+                        delete_button = gr.Button("Xóa câu trả lời", variant="stop")
+                with gr.Column():
+                    status_log_manage = gr.Textbox(label="Nhật ký quản lý", interactive=False)
+            
+            gr.Markdown("---")
+            gr.Markdown("### Bàn Chỉnh Sửa")
+            # Ô JSON này vừa để hiển thị, vừa để sửa
+            json_editor_output = gr.JSON(label="Nội dung câu trả lời (Có thể sửa trực tiếp tại đây)")
+            update_button = gr.Button("Lưu Thay Đổi Thủ Công", variant="primary")
+
     gr.Markdown("---")
-    gr.Markdown("### 4. Kết Quả Bài Làm Hiện Tại")
+    gr.Markdown("### 4. Kết Quả Bài Làm Hiện Tại (Toàn bộ file submission)")
     submission_output = gr.JSON(value=final_submission, label=f"Nội dung file: {SUBMISSION_PATH}")
 
-    # Kết nối sự kiện
-    generate_button.click(fn=generate_code_from_query, inputs=[q_id_input, user_query_input], outputs=[manual_code_input, status_log_output, submission_output])
-    execute_button.click(fn=execute_code, inputs=[q_id_input, manual_code_input, clip_mode_checkbox, user_query_input], outputs=[status_log_output, submission_output])
-    clear_button.add([q_id_input, user_query_input, manual_code_input])
+    # --- KẾT NỐI SỰ KIỆN ---
+    # Tab 1: Tạo và Thi hành
+    generate_button.click(fn=generate_code_from_query, inputs=[q_id_input_main, user_query_input], outputs=[manual_code_input, status_log_output, submission_output])
+    execute_button.click(fn=execute_code, inputs=[q_id_input_main, manual_code_input, clip_mode_checkbox, user_query_input], outputs=[status_log_output, submission_output])
+    clear_button_main.add([q_id_input_main, user_query_input, manual_code_input])
+    
+    # Tab 2: Quản lý thủ công
+    load_button.click(fn=load_answer_for_editing, inputs=[q_id_input_manage], outputs=[json_editor_output, status_log_manage])
+    update_button.click(fn=update_submission_manually, inputs=[q_id_input_manage, json_editor_output], outputs=[status_log_manage, submission_output])
+    delete_button.click(fn=delete_answer, inputs=[q_id_input_manage], outputs=[status_log_manage, submission_output])
+
 
 if __name__ == "__main__":
     app.launch()
