@@ -1,4 +1,4 @@
-# **Video Retrieval - Top 1 AI Challenge PTIT**
+# **Video Retrieval - Top 1 AI Contest PTIT**
 
 Dự án này cung cấp một pipeline hoàn chỉnh để xử lý video và trả lời các câu hỏi truy vấn phức tạp về nội dung.
 
