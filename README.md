@@ -1,4 +1,4 @@
-# **Video Analysis Pipeline V6 — “Hội Đồng Thẩm Định” với Suy Luận Theo Thời Gian**
+# **Video Retrieval - Top 1 AI Challenge PTIT**
 
 Dự án này cung cấp một pipeline hoàn chỉnh để xử lý video và trả lời các câu hỏi truy vấn phức tạp về nội dung.
 
